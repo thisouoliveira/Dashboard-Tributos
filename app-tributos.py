@@ -98,7 +98,7 @@ with st.sidebar:
     tributos_disponiveis = set()
     
     # Verificar anos disponíveis em todos os arquivos
-    arquivos = ["Arrecadacao Tributos.xlsx", "Arrecadacao Ensino.xlsx", "Arrecadacao Bancos.xlsx", "Receita Propria Consolidado.xlsx", "Arrecadacao Divida Ativa.xlsx"]
+    arquivos = ["Arrecadacao Tributos.xlsx", "Receita Propria Consolidado.xlsx", "Arrecadacao Divida Ativa.xlsx"]
     
     for arquivo in arquivos:
         try:
@@ -143,9 +143,11 @@ with st.sidebar:
     # Informações sobre os filtros
     st.markdown("### ℹ️ Sobre os Filtros")
     st.markdown("""
-    - **📅 Anos:** Aplicado em todas as abas
-    - **🏛️ Tributos:** Aplicado apenas na aba de Tributos
+    - **📅 Anos:** Aplicado em todas as abas automaticamente
+    - **🏛️ Tributos:** Aplicado em todas as abas que possuem dados de tributos
     - Os filtros são aplicados automaticamente em todas as visualizações
+    - Use o botão "Limpar Todos os Filtros" para restaurar os valores padrão
+    - Se um ano/tributo não existir em uma aba específica, será ignorado
     """)
     
     st.markdown("---")
@@ -187,10 +189,8 @@ with st.sidebar:
     )
 
 # ========== SISTEMA DE ABAS ==========
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "🏛️ Arrecadação Tributos", 
-    "🎓 Arrecadação Ensino", 
-    "🏦 Arrecadação Bancos",
     "💰 Receita Própria",
     "📈 Evolução Arrecadação",
     "💳 Arrecadação Dívida Ativa"
@@ -200,8 +200,79 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 with tab1:
     st.markdown("## 🏛️ Arrecadação Tributos")
     
+    # Informações sobre o arquivo fonte
+    st.markdown("### 📁 Arquivo Fonte dos Dados")
+    col_info1, col_info2 = st.columns([2, 1])
+    
+    with col_info1:
+        st.info("""
+        **📊 Fonte:** `Arrecadacao Tributos.xlsx`
+        
+        **📋 Descrição:** Dados consolidados de arrecadação tributária municipal, 
+        contendo valores anuais por tipo de tributo.
+        
+        **📅 Período:** Dados históricos de arrecadação por ano
+        **🏛️ Tributos:** IPTU, ISS, ITBI, Taxas, Multas e outros tributos municipais
+        """)
+    
+    with col_info2:
+        # Verificar se o arquivo existe e mostrar informações
+        try:
+            import os
+            arquivo_info = "Arrecadacao Tributos.xlsx"
+            if os.path.exists(arquivo_info):
+                stat_info = os.stat(arquivo_info)
+                tamanho_mb = stat_info.st_size / (1024 * 1024)
+                data_modificacao = datetime.fromtimestamp(stat_info.st_mtime)
+                
+                st.success(f"""
+                ✅ **Arquivo encontrado**
+                
+                📏 **Tamanho:** {tamanho_mb:.2f} MB
+                📅 **Última modificação:** {data_modificacao.strftime('%d/%m/%Y %H:%M')}
+                """)
+            else:
+                st.error("❌ Arquivo não encontrado")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao verificar arquivo: {e}")
+    
+    st.markdown("---")
+    
+    # Botão para download do arquivo original
+    st.markdown("### 💾 Download do Arquivo Original")
+    try:
+        with open("Arrecadacao Tributos.xlsx", "rb") as file:
+            st.download_button(
+                label="📥 Download Arrecadacao Tributos.xlsx",
+                data=file.read(),
+                file_name="Arrecadacao Tributos.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except FileNotFoundError:
+        st.warning("⚠️ Arquivo não disponível para download")
+    except Exception as e:
+        st.error(f"❌ Erro ao preparar download: {e}")
+    
+    st.markdown("---")
+    
     # Carregar dados
     df = carregar_dados("Arrecadacao Tributos.xlsx")
+    
+    # Mostrar prévia dos dados
+    if df is not None and not df.empty:
+        st.markdown("### 👀 Prévia dos Dados")
+        st.info(f"""
+        **📊 Estrutura dos dados:**
+        - **Linhas:** {len(df)} registros
+        - **Colunas:** {len(df.columns)} campos
+        - **Colunas disponíveis:** {', '.join(df.columns.tolist())}
+        """)
+        
+        # Mostrar primeiras linhas dos dados
+        with st.expander("📋 Ver primeiras linhas dos dados", expanded=False):
+            st.dataframe(df.head(10), use_container_width=True)
+    else:
+        st.warning("⚠️ Não foi possível carregar os dados para mostrar a prévia")
     
     # Mostrar filtros aplicados
     if anos_selecionados or tributos_selecionados:
@@ -510,351 +581,88 @@ with tab1:
             hide_index=True
         )
 
-# ========== ABA 2: ARRECADAÇÃO ENSINO ==========
+
+
+
+
+# ========== ABA 2: RECEITA PRÓPRIA ==========
 with tab2:
-    st.markdown("## 🎓 Arrecadação Ensino")
-    
-    try:
-        # Carregar dados de ensino
-        df_ensino = carregar_dados("Arrecadacao Ensino.xlsx")
-        
-        if df_ensino is None:
-            st.error("Não foi possível carregar os dados de ensino.")
-        else:
-            # Mostrar filtros aplicados
-            if anos_selecionados:
-                st.info(f"📅 **Anos selecionados:** {', '.join(anos_selecionados)}")
-            
-            # Filtrar por anos selecionados (filtro global)
-            if anos_selecionados:
-                df_ensino = df_ensino[df_ensino["ANO"].isin(anos_selecionados)]
-            
-            # Verificar se há dados após filtros
-            if df_ensino.empty:
-                st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados. Tente ajustar os filtros na sidebar.")
-            elif "ANO" not in df_ensino.columns:
-                st.error("A coluna 'ANO' não foi encontrada no arquivo 'Arrecadacao Ensino.xlsx'.")
-            else:
-                coluna_valor_ensino = [col for col in df_ensino.columns if col != "ANO"][0]
-                
-                # Métricas de ensino
-                ultimo_ano_ensino = df_ensino["ANO"].max()
-                penultimo_ano_ensino = df_ensino["ANO"].iloc[-2] if len(df_ensino) > 1 else ultimo_ano_ensino
-                
-                ultimo_valor_ensino = df_ensino[df_ensino["ANO"] == ultimo_ano_ensino][coluna_valor_ensino].iloc[0]
-                penultimo_valor_ensino = df_ensino[df_ensino["ANO"] == penultimo_ano_ensino][coluna_valor_ensino].iloc[0]
-                
-                crescimento_ensino = ((ultimo_valor_ensino - penultimo_valor_ensino) / penultimo_valor_ensino * 100) if penultimo_valor_ensino > 0 else 0
-                media_ensino = df_ensino[coluna_valor_ensino].mean()
-                
-                # Layout de métricas
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_valor_ensino)}</div>
-                        <div class="metric-label">Ensino {ultimo_ano_ensino}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(penultimo_valor_ensino)}</div>
-                        <div class="metric-label">Ensino {penultimo_ano_ensino}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{crescimento_ensino:.1f}%</div>
-                        <div class="metric-label">Crescimento Ensino</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col4:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(media_ensino)}</div>
-                        <div class="metric-label">Média Anual Ensino</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Gráficos de ensino
-                col_ensino1, col_ensino2 = st.columns(2)
-                
-                with col_ensino1:
-                    # Gráfico de barras
-                    df_ensino["TEXTO_FORMATADO"] = df_ensino[coluna_valor_ensino].apply(formatar_moeda_br)
-                    
-                    fig_ensino_bar = px.bar(
-                        df_ensino,
-                        x="ANO",
-                        y=coluna_valor_ensino,
-                        title="Arrecadação Ensino por Ano",
-                        labels={"ANO": "Ano", coluna_valor_ensino: "Valor Arrecadado (R$)"},
-                        text="TEXTO_FORMATADO",
-                        color_discrete_sequence=["#20B2AA"],
-                        template=tema_grafico
-                    )
-                    
-                    fig_ensino_bar.update_traces(
-                        textposition="outside",
-                        textfont=dict(size=12)
-                    )
-                    
-                    fig_ensino_bar.update_layout(
-                        height=400,
-                        title_x=0.5,
-                        yaxis=dict(
-                            tickformat=".2f",
-                            tickprefix="R$ ",
-                            separatethousands=True,
-                        ),
-                        bargap=0.3
-                    )
-                    
-                    st.plotly_chart(fig_ensino_bar, use_container_width=True)
-                
-                with col_ensino2:
-                    # Gráfico de linha
-                    fig_ensino_line = px.line(
-                        df_ensino,
-                        x="ANO",
-                        y=coluna_valor_ensino,
-                        title="Evolução da Arrecadação Ensino",
-                        markers=True,
-                        template=tema_grafico
-                    )
-                    
-                    fig_ensino_line.update_layout(
-                        height=400,
-                        title_x=0.5,
-                        yaxis=dict(
-                            tickformat=".2f",
-                            tickprefix="R$ ",
-                            separatethousands=True,
-                        )
-                    )
-                    
-                    st.plotly_chart(fig_ensino_line, use_container_width=True)
-                
-                # Gráfico de área
-                st.markdown("### 📈 Evolução Temporal")
-                fig_ensino_area = px.area(
-                    df_ensino,
-                    x="ANO",
-                    y=coluna_valor_ensino,
-                    title="Evolução da Arrecadação Ensino (Área)",
-                    template=tema_grafico
-                )
-                
-                fig_ensino_area.update_layout(
-                    height=400,
-                    title_x=0.5,
-                    yaxis=dict(
-                        tickformat=".2f",
-                        tickprefix="R$ ",
-                        separatethousands=True,
-                    )
-                )
-                
-                st.plotly_chart(fig_ensino_area, use_container_width=True)
-                
-                # Tabela de dados
-                st.markdown("### 📋 Dados Detalhados - Ensino")
-                df_ensino_formatado = df_ensino.copy()
-                df_ensino_formatado[coluna_valor_ensino] = df_ensino_formatado[coluna_valor_ensino].apply(formatar_moeda_br)
-                
-                st.dataframe(
-                    df_ensino_formatado,
-                    use_container_width=True,
-                    hide_index=True
-                )
-    
-    except FileNotFoundError:
-        st.warning("📁 O arquivo 'Arrecadacao Ensino.xlsx' não foi encontrado.")
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar dados de ensino: {e}")
-
-# ========== ABA 3: ARRECADAÇÃO BANCOS ==========
-with tab3:
-    st.markdown("## 🏦 Arrecadação Bancos")
-    
-    try:
-        # Carregar dados de bancos
-        df_bancos = carregar_dados("Arrecadacao Bancos.xlsx")
-        
-        if df_bancos is None:
-            st.error("Não foi possível carregar os dados de bancos.")
-        else:
-            # Mostrar filtros aplicados
-            if anos_selecionados:
-                st.info(f"📅 **Anos selecionados:** {', '.join(anos_selecionados)}")
-            
-            # Filtrar por anos selecionados (filtro global)
-            if anos_selecionados:
-                df_bancos = df_bancos[df_bancos["ANO"].isin(anos_selecionados)]
-            
-            # Verificar se há dados após filtros
-            if df_bancos.empty:
-                st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados. Tente ajustar os filtros na sidebar.")
-            elif "ANO" not in df_bancos.columns:
-                st.error("A coluna 'ANO' não foi encontrada no arquivo 'Arrecadacao Bancos.xlsx'.")
-            else:
-                coluna_valor_bancos = [col for col in df_bancos.columns if col != "ANO"][0]
-                
-                # Métricas de bancos
-                ultimo_ano_bancos = df_bancos["ANO"].max()
-                penultimo_ano_bancos = df_bancos["ANO"].iloc[-2] if len(df_bancos) > 1 else ultimo_ano_bancos
-                
-                ultimo_valor_bancos = df_bancos[df_bancos["ANO"] == ultimo_ano_bancos][coluna_valor_bancos].iloc[0]
-                penultimo_valor_bancos = df_bancos[df_bancos["ANO"] == penultimo_ano_bancos][coluna_valor_bancos].iloc[0]
-                
-                crescimento_bancos = ((ultimo_valor_bancos - penultimo_valor_bancos) / penultimo_valor_bancos * 100) if penultimo_valor_bancos > 0 else 0
-                media_bancos = df_bancos[coluna_valor_bancos].mean()
-                
-                # Layout de métricas
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_valor_bancos)}</div>
-                        <div class="metric-label">Bancos {ultimo_ano_bancos}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(penultimo_valor_bancos)}</div>
-                        <div class="metric-label">Bancos {penultimo_ano_bancos}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col3:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{crescimento_bancos:.1f}%</div>
-                        <div class="metric-label">Crescimento Bancos</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col4:
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(media_bancos)}</div>
-                        <div class="metric-label">Média Anual Bancos</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Gráficos de bancos
-                col_bancos1, col_bancos2 = st.columns(2)
-                
-                with col_bancos1:
-                    # Gráfico de barras
-                    df_bancos["TEXTO_FORMATADO"] = df_bancos[coluna_valor_bancos].apply(formatar_moeda_br)
-                    
-                    fig_bancos_bar = px.bar(
-                        df_bancos,
-                        x="ANO",
-                        y=coluna_valor_bancos,
-                        title="Arrecadação Bancos por Ano",
-                        labels={"ANO": "Ano", coluna_valor_bancos: "Valor Arrecadado (R$)"},
-                        text="TEXTO_FORMATADO",
-                        color_discrete_sequence=["#FF6B6B"],
-                        template=tema_grafico
-                    )
-                    
-                    fig_bancos_bar.update_traces(
-                        textposition="outside",
-                        textfont=dict(size=12)
-                    )
-                    
-                    fig_bancos_bar.update_layout(
-                        height=400,
-                        title_x=0.5,
-                        yaxis=dict(
-                            tickformat=".2f",
-                            tickprefix="R$ ",
-                            separatethousands=True,
-                        ),
-                        bargap=0.3
-                    )
-                    
-                    st.plotly_chart(fig_bancos_bar, use_container_width=True)
-                
-                with col_bancos2:
-                    # Gráfico de linha
-                    fig_bancos_line = px.line(
-                        df_bancos,
-                        x="ANO",
-                        y=coluna_valor_bancos,
-                        title="Evolução da Arrecadação Bancos",
-                        markers=True,
-                        template=tema_grafico
-                    )
-                    
-                    fig_bancos_line.update_layout(
-                        height=400,
-                        title_x=0.5,
-                        yaxis=dict(
-                            tickformat=".2f",
-                            tickprefix="R$ ",
-                            separatethousands=True,
-                        )
-                    )
-                    
-                    st.plotly_chart(fig_bancos_line, use_container_width=True)
-                
-                # Gráfico de área
-                st.markdown("### 📈 Evolução Temporal")
-                fig_bancos_area = px.area(
-                    df_bancos,
-                    x="ANO",
-                    y=coluna_valor_bancos,
-                    title="Evolução da Arrecadação Bancos (Área)",
-                    template=tema_grafico
-                )
-                
-                fig_bancos_area.update_layout(
-                    height=400,
-                    title_x=0.5,
-                    yaxis=dict(
-                        tickformat=".2f",
-                        tickprefix="R$ ",
-                        separatethousands=True,
-                    )
-                )
-                
-                st.plotly_chart(fig_bancos_area, use_container_width=True)
-                
-                # Tabela de dados
-                st.markdown("### 📋 Dados Detalhados - Bancos")
-                df_bancos_formatado = df_bancos.copy()
-                df_bancos_formatado[coluna_valor_bancos] = df_bancos_formatado[coluna_valor_bancos].apply(formatar_moeda_br)
-                
-                st.dataframe(
-                    df_bancos_formatado,
-                    use_container_width=True,
-                    hide_index=True
-                )
-    
-    except FileNotFoundError:
-        st.warning("📁 O arquivo 'Arrecadacao Bancos.xlsx' não foi encontrado.")
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar dados de bancos: {e}")
-
-# ========== ABA 4: RECEITA PRÓPRIA ==========
-with tab4:
     st.markdown("## 💰 Receita Própria Consolidada")
+    
+    # Informações sobre o arquivo fonte
+    st.markdown("### 📁 Arquivo Fonte dos Dados")
+    col_info1, col_info2 = st.columns([2, 1])
+    
+    with col_info1:
+        st.info("""
+        **📊 Fonte:** `Receita Propria Consolidado.xlsx`
+        
+        **📋 Descrição:** Dados consolidados de receita própria municipal, 
+        contendo valores anuais de receitas próprias.
+        
+        **📅 Período:** Dados históricos de receita própria por ano
+        **💰 Tipo:** Receitas próprias consolidadas do município
+        """)
+    
+    with col_info2:
+        # Verificar se o arquivo existe e mostrar informações
+        try:
+            import os
+            arquivo_info = "Receita Propria Consolidado.xlsx"
+            if os.path.exists(arquivo_info):
+                stat_info = os.stat(arquivo_info)
+                tamanho_mb = stat_info.st_size / (1024 * 1024)
+                data_modificacao = datetime.fromtimestamp(stat_info.st_mtime)
+                
+                st.success(f"""
+                ✅ **Arquivo encontrado**
+                
+                📏 **Tamanho:** {tamanho_mb:.2f} MB
+                📅 **Última modificação:** {data_modificacao.strftime('%d/%m/%Y %H:%M')}
+                """)
+            else:
+                st.error("❌ Arquivo não encontrado")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao verificar arquivo: {e}")
+    
+    st.markdown("---")
+    
+    # Botão para download do arquivo original
+    st.markdown("### 💾 Download do Arquivo Original")
+    try:
+        with open("Receita Propria Consolidado.xlsx", "rb") as file:
+            st.download_button(
+                label="📥 Download Receita Propria Consolidado.xlsx",
+                data=file.read(),
+                file_name="Receita Propria Consolidado.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except FileNotFoundError:
+        st.warning("⚠️ Arquivo não disponível para download")
+    except Exception as e:
+        st.error(f"❌ Erro ao preparar download: {e}")
+    
+    st.markdown("---")
     
     try:
         # Carregar dados de receita própria
         df_receita = carregar_dados("Receita Propria Consolidado.xlsx")
+        
+        # Mostrar prévia dos dados
+        if df_receita is not None and not df_receita.empty:
+            st.markdown("### 👀 Prévia dos Dados")
+            st.info(f"""
+            **📊 Estrutura dos dados:**
+            - **Linhas:** {len(df_receita)} registros
+            - **Colunas:** {len(df_receita.columns)} campos
+            - **Colunas disponíveis:** {', '.join(df_receita.columns.tolist())}
+            """)
+            
+            # Mostrar primeiras linhas dos dados
+            with st.expander("📋 Ver primeiras linhas dos dados", expanded=False):
+                st.dataframe(df_receita.head(10), use_container_width=True)
+        else:
+            st.warning("⚠️ Não foi possível carregar os dados para mostrar a prévia")
         
         if df_receita is None:
             st.error("Não foi possível carregar os dados de receita própria.")
@@ -1017,9 +825,64 @@ with tab4:
     except Exception as e:
         st.error(f"❌ Erro ao carregar dados de receita própria: {e}")
 
-# ========== ABA 5: EVOLUÇÃO ARRECADAÇÃO ==========
-with tab5:
+# ========== ABA 3: EVOLUÇÃO ARRECADAÇÃO ==========
+with tab3:
     st.markdown("## 📈 Evolução Arrecadação")
+    
+    # Informações sobre o arquivo fonte
+    st.markdown("### 📁 Arquivo Fonte dos Dados")
+    col_info1, col_info2 = st.columns([2, 1])
+    
+    with col_info1:
+        st.info("""
+        **📊 Fonte:** `Evolucao Arrecadacao.xlsx`
+        
+        **📋 Descrição:** Dados detalhados de evolução mensal da arrecadação, 
+        contendo orçado, arrecadado e metas por tributo e mês.
+        
+        **📅 Período:** Dados mensais organizados por ano em abas separadas
+        **📊 Métricas:** Orçado, Arrecadado, Meta, Superávit/Déficit
+        """)
+    
+    with col_info2:
+        # Verificar se o arquivo existe e mostrar informações
+        try:
+            import os
+            arquivo_info = "Evolucao Arrecadacao.xlsx"
+            if os.path.exists(arquivo_info):
+                stat_info = os.stat(arquivo_info)
+                tamanho_mb = stat_info.st_size / (1024 * 1024)
+                data_modificacao = datetime.fromtimestamp(stat_info.st_mtime)
+                
+                st.success(f"""
+                ✅ **Arquivo encontrado**
+                
+                📏 **Tamanho:** {tamanho_mb:.2f} MB
+                📅 **Última modificação:** {data_modificacao.strftime('%d/%m/%Y %H:%M')}
+                """)
+            else:
+                st.error("❌ Arquivo não encontrado")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao verificar arquivo: {e}")
+    
+    st.markdown("---")
+    
+    # Botão para download do arquivo original
+    st.markdown("### 💾 Download do Arquivo Original")
+    try:
+        with open("Evolucao Arrecadacao.xlsx", "rb") as file:
+            st.download_button(
+                label="📥 Download Evolucao Arrecadacao.xlsx",
+                data=file.read(),
+                file_name="Evolucao Arrecadacao.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except FileNotFoundError:
+        st.warning("⚠️ Arquivo não disponível para download")
+    except Exception as e:
+        st.error(f"❌ Erro ao preparar download: {e}")
+    
+    st.markdown("---")
     
     # Informação sobre o cálculo de superávit/déficit
     st.info("""
@@ -1028,6 +891,19 @@ with tab5:
     - **Déficit:** Quando ARRECADADO < ORÇADO (valor negativo)
     - **Fórmula:** SALDO = ARRECADADO - ORÇADO
     """)
+    
+    # Mostrar filtros globais aplicados
+    if anos_selecionados or tributos_selecionados:
+        st.markdown("### 🔍 Filtros Globais Aplicados")
+        col_filtro1, col_filtro2 = st.columns(2)
+        
+        with col_filtro1:
+            if anos_selecionados:
+                st.info(f"📅 **Anos selecionados:** {', '.join(anos_selecionados)}")
+        
+        with col_filtro2:
+            if tributos_selecionados:
+                st.info(f"🏛️ **Tributos selecionados:** {', '.join(tributos_selecionados)}")
     
     try:
         # Carregar dados de evolução
@@ -1041,56 +917,59 @@ with tab5:
         
         st.success(f"✅ Arquivo carregado com sucesso! Encontradas {len(anos_disponiveis_evolucao)} abas: {', '.join(anos_disponiveis_evolucao)}")
         
-        # Filtros específicos para evolução
-        st.markdown("### 🔍 Filtros de Análise")
-        col_filtro1, col_filtro2 = st.columns(2)
+        # Mostrar prévia dos dados
+        st.markdown("### 👀 Prévia dos Dados")
+        st.info(f"""
+        **📊 Estrutura do arquivo:**
+        - **Total de abas:** {len(anos_disponiveis_evolucao)} anos
+        - **Abas disponíveis:** {', '.join(anos_disponiveis_evolucao)}
+        - **Formato:** Dados mensais organizados por ano
+        """)
         
-        with col_filtro1:
-            anos_evolucao_selecionados = st.multiselect(
-                "📅 Anos para análise",
-                options=anos_disponiveis_evolucao,
-                default=anos_disponiveis_evolucao[-2:] if len(anos_disponiveis_evolucao) >= 2 else anos_disponiveis_evolucao,
-                help="Selecione os anos que deseja analisar"
-            )
+        # Mostrar prévia da primeira aba
+        if anos_disponiveis_evolucao:
+            try:
+                df_previa = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_disponiveis_evolucao[0])
+                with st.expander(f"📋 Ver primeiras linhas da aba '{anos_disponiveis_evolucao[0]}'", expanded=False):
+                    st.dataframe(df_previa.head(10), use_container_width=True)
+            except Exception as e:
+                st.warning(f"⚠️ Não foi possível mostrar prévia da aba {anos_disponiveis_evolucao[0]}: {e}")
         
-        with col_filtro2:
-            # Carregar um ano para obter os tributos disponíveis
-            if anos_evolucao_selecionados:
-                try:
-                    df_temp = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_evolucao_selecionados[0])
-                    
-                    # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
-                    coluna_tributo = None
-                    if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
-                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
-                    elif 'TRIBUTO' in df_temp.columns:
-                        coluna_tributo = 'TRIBUTO'
-                    
-                    if coluna_tributo:
-                        tributos_evolucao = df_temp[coluna_tributo].unique().tolist()
-                        st.success(f"✅ Encontrados {len(tributos_evolucao)} tributos na aba {anos_evolucao_selecionados[0]} (coluna: {coluna_tributo})")
-                    else:
-                        st.error(f"❌ Coluna de tributo não encontrada na aba {anos_evolucao_selecionados[0]}")
-                        st.write("Colunas disponíveis:", list(df_temp.columns))
-                        tributos_evolucao = []
-                except Exception as e:
-                    st.error(f"❌ Erro ao carregar aba {anos_evolucao_selecionados[0]}: {e}")
-                    tributos_evolucao = []
-            else:
-                tributos_evolucao = []
-            
-            if tributos_evolucao:
-                tributos_evolucao_selecionados = st.multiselect(
-                    "🏛️ Tributos para análise",
-                    options=tributos_evolucao,
-                    default=tributos_evolucao,
-                    help="Selecione os tributos que deseja analisar"
-                )
-            else:
-                tributos_evolucao_selecionados = []
+        # Usar filtros globais se disponíveis, senão usar todos os anos
+        # Filtrar apenas anos que existem no arquivo de evolução
+        anos_evolucao_selecionados = [ano for ano in (anos_selecionados if anos_selecionados else anos_disponiveis_evolucao) if ano in anos_disponiveis_evolucao]
         
         if not anos_evolucao_selecionados:
-            st.warning("⚠️ Selecione pelo menos um ano para análise.")
+            st.warning("⚠️ Nenhum dos anos selecionados globalmente existe no arquivo de evolução.")
+            anos_evolucao_selecionados = anos_disponiveis_evolucao
+        
+        # Carregar um ano para obter os tributos disponíveis
+        tributos_evolucao = []
+        if anos_evolucao_selecionados:
+            try:
+                df_temp = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_evolucao_selecionados[0])
+                
+                # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                coluna_tributo = None
+                if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
+                    coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                elif 'TRIBUTO' in df_temp.columns:
+                    coluna_tributo = 'TRIBUTO'
+                
+                if coluna_tributo:
+                    tributos_evolucao = df_temp[coluna_tributo].unique().tolist()
+                    st.success(f"✅ Encontrados {len(tributos_evolucao)} tributos na aba {anos_evolucao_selecionados[0]} (coluna: {coluna_tributo})")
+                else:
+                    st.error(f"❌ Coluna de tributo não encontrada na aba {anos_evolucao_selecionados[0]}")
+                    st.write("Colunas disponíveis:", list(df_temp.columns))
+            except Exception as e:
+                st.error(f"❌ Erro ao carregar aba {anos_evolucao_selecionados[0]}: {e}")
+        
+        # Usar filtros globais de tributos se disponíveis, senão usar todos os tributos
+        tributos_evolucao_selecionados = tributos_selecionados if tributos_selecionados else tributos_evolucao
+        
+        if not anos_evolucao_selecionados:
+            st.warning("⚠️ Nenhum ano selecionado para análise.")
         else:
             # Carregar e processar dados
             dados_evolucao = []
@@ -1505,9 +1384,77 @@ with tab5:
 
 
 
-# ========== ABA 6: ARRECADAÇÃO DÍVIDA ATIVA ==========
-with tab6:
+# ========== ABA 4: ARRECADAÇÃO DÍVIDA ATIVA ==========
+with tab4:
     st.markdown("## 💳 Arrecadação Dívida Ativa")
+    
+    # Informações sobre o arquivo fonte
+    st.markdown("### 📁 Arquivo Fonte dos Dados")
+    col_info1, col_info2 = st.columns([2, 1])
+    
+    with col_info1:
+        st.info("""
+        **📊 Fonte:** `Arrecadacao Divida Ativa.xlsx`
+        
+        **📋 Descrição:** Dados de arrecadação de dívida ativa municipal, 
+        contendo valores mensais de orçado, arrecadado e metas por tributo.
+        
+        **📅 Período:** Dados mensais organizados por ano em abas separadas
+        **💳 Tipo:** Arrecadação de dívida ativa por tributo
+        """)
+    
+    with col_info2:
+        # Verificar se o arquivo existe e mostrar informações
+        try:
+            import os
+            arquivo_info = "Arrecadacao Divida Ativa.xlsx"
+            if os.path.exists(arquivo_info):
+                stat_info = os.stat(arquivo_info)
+                tamanho_mb = stat_info.st_size / (1024 * 1024)
+                data_modificacao = datetime.fromtimestamp(stat_info.st_mtime)
+                
+                st.success(f"""
+                ✅ **Arquivo encontrado**
+                
+                📏 **Tamanho:** {tamanho_mb:.2f} MB
+                📅 **Última modificação:** {data_modificacao.strftime('%d/%m/%Y %H:%M')}
+                """)
+            else:
+                st.error("❌ Arquivo não encontrado")
+        except Exception as e:
+            st.warning(f"⚠️ Erro ao verificar arquivo: {e}")
+    
+    st.markdown("---")
+    
+    # Botão para download do arquivo original
+    st.markdown("### 💾 Download do Arquivo Original")
+    try:
+        with open("Arrecadacao Divida Ativa.xlsx", "rb") as file:
+            st.download_button(
+                label="📥 Download Arrecadacao Divida Ativa.xlsx",
+                data=file.read(),
+                file_name="Arrecadacao Divida Ativa.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except FileNotFoundError:
+        st.warning("⚠️ Arquivo não disponível para download")
+    except Exception as e:
+        st.error(f"❌ Erro ao preparar download: {e}")
+    
+    st.markdown("---")
+    
+    # Mostrar filtros globais aplicados
+    if anos_selecionados or tributos_selecionados:
+        st.markdown("### 🔍 Filtros Globais Aplicados")
+        col_filtro1, col_filtro2 = st.columns(2)
+        
+        with col_filtro1:
+            if anos_selecionados:
+                st.info(f"📅 **Anos selecionados:** {', '.join(anos_selecionados)}")
+        
+        with col_filtro2:
+            if tributos_selecionados:
+                st.info(f"🏛️ **Tributos selecionados:** {', '.join(tributos_selecionados)}")
     
     try:
         # Carregar dados de dívida ativa
@@ -1521,56 +1468,59 @@ with tab6:
         
         st.success(f"✅ Arquivo carregado com sucesso! Encontradas {len(anos_disponiveis_divida)} abas: {', '.join(anos_disponiveis_divida)}")
         
-        # Filtros específicos para dívida ativa
-        st.markdown("### 🔍 Filtros de Análise")
-        col_filtro1, col_filtro2 = st.columns(2)
+        # Mostrar prévia dos dados
+        st.markdown("### 👀 Prévia dos Dados")
+        st.info(f"""
+        **📊 Estrutura do arquivo:**
+        - **Total de abas:** {len(anos_disponiveis_divida)} anos
+        - **Abas disponíveis:** {', '.join(anos_disponiveis_divida)}
+        - **Formato:** Dados mensais de dívida ativa organizados por ano
+        """)
         
-        with col_filtro1:
-            anos_divida_selecionados = st.multiselect(
-                "📅 Anos para análise",
-                options=anos_disponiveis_divida,
-                default=anos_disponiveis_divida[-2:] if len(anos_disponiveis_divida) >= 2 else anos_disponiveis_divida,
-                help="Selecione os anos que deseja analisar"
-            )
+        # Mostrar prévia da primeira aba
+        if anos_disponiveis_divida:
+            try:
+                df_previa = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_disponiveis_divida[0])
+                with st.expander(f"📋 Ver primeiras linhas da aba '{anos_disponiveis_divida[0]}'", expanded=False):
+                    st.dataframe(df_previa.head(10), use_container_width=True)
+            except Exception as e:
+                st.warning(f"⚠️ Não foi possível mostrar prévia da aba {anos_disponiveis_divida[0]}: {e}")
         
-        with col_filtro2:
-            # Carregar um ano para obter os tributos disponíveis
-            if anos_divida_selecionados:
-                try:
-                    df_temp = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_divida_selecionados[0])
-                    
-                    # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
-                    coluna_tributo = None
-                    if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
-                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
-                    elif 'TRIBUTO' in df_temp.columns:
-                        coluna_tributo = 'TRIBUTO'
-                    
-                    if coluna_tributo:
-                        tributos_divida = df_temp[coluna_tributo].unique().tolist()
-                        st.success(f"✅ Encontrados {len(tributos_divida)} tributos na aba {anos_divida_selecionados[0]} (coluna: {coluna_tributo})")
-                    else:
-                        st.error(f"❌ Coluna de tributo não encontrada na aba {anos_divida_selecionados[0]}")
-                        st.write("Colunas disponíveis:", list(df_temp.columns))
-                        tributos_divida = []
-                except Exception as e:
-                    st.error(f"❌ Erro ao carregar aba {anos_divida_selecionados[0]}: {e}")
-                    tributos_divida = []
-            else:
-                tributos_divida = []
-            
-            if tributos_divida:
-                tributos_divida_selecionados = st.multiselect(
-                    "🏛️ Tributos para análise",
-                    options=tributos_divida,
-                    default=tributos_divida,
-                    help="Selecione os tributos que deseja analisar"
-                )
-            else:
-                tributos_divida_selecionados = []
+        # Usar filtros globais se disponíveis, senão usar todos os anos
+        # Filtrar apenas anos que existem no arquivo de dívida ativa
+        anos_divida_selecionados = [ano for ano in (anos_selecionados if anos_selecionados else anos_disponiveis_divida) if ano in anos_disponiveis_divida]
         
         if not anos_divida_selecionados:
-            st.warning("⚠️ Selecione pelo menos um ano para análise.")
+            st.warning("⚠️ Nenhum dos anos selecionados globalmente existe no arquivo de dívida ativa.")
+            anos_divida_selecionados = anos_disponiveis_divida
+        
+        # Carregar um ano para obter os tributos disponíveis
+        tributos_divida = []
+        if anos_divida_selecionados:
+            try:
+                df_temp = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_divida_selecionados[0])
+                
+                # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                coluna_tributo = None
+                if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
+                    coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                elif 'TRIBUTO' in df_temp.columns:
+                    coluna_tributo = 'TRIBUTO'
+                
+                if coluna_tributo:
+                    tributos_divida = df_temp[coluna_tributo].unique().tolist()
+                    st.success(f"✅ Encontrados {len(tributos_divida)} tributos na aba {anos_divida_selecionados[0]} (coluna: {coluna_tributo})")
+                else:
+                    st.error(f"❌ Coluna de tributo não encontrada na aba {anos_divida_selecionados[0]}")
+                    st.write("Colunas disponíveis:", list(df_temp.columns))
+            except Exception as e:
+                st.error(f"❌ Erro ao carregar aba {anos_divida_selecionados[0]}: {e}")
+        
+        # Usar filtros globais de tributos se disponíveis, senão usar todos os tributos
+        tributos_divida_selecionados = tributos_selecionados if tributos_selecionados else tributos_divida
+        
+        if not anos_divida_selecionados:
+            st.warning("⚠️ Nenhum ano selecionado para análise.")
         else:
             # Carregar e processar dados
             dados_divida = []
