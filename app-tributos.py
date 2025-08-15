@@ -98,7 +98,7 @@ with st.sidebar:
     tributos_disponiveis = set()
     
     # Verificar anos disponíveis em todos os arquivos
-    arquivos = ["Arrecadacao Tributos.xlsx", "Arrecadacao Ensino.xlsx", "Arrecadacao Bancos.xlsx", "Receita Propria Consolidado.xlsx"]
+    arquivos = ["Arrecadacao Tributos.xlsx", "Arrecadacao Ensino.xlsx", "Arrecadacao Bancos.xlsx", "Receita Propria Consolidado.xlsx", "Arrecadacao Divida Ativa.xlsx"]
     
     for arquivo in arquivos:
         try:
@@ -187,12 +187,13 @@ with st.sidebar:
     )
 
 # ========== SISTEMA DE ABAS ==========
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "🏛️ Arrecadação Tributos", 
     "🎓 Arrecadação Ensino", 
     "🏦 Arrecadação Bancos",
     "💰 Receita Própria",
-    "📈 Evolução Arrecadação"
+    "📈 Evolução Arrecadação",
+    "💳 Arrecadação Dívida Ativa"
 ])
 
 # ========== ABA 1: ARRECADAÇÃO TRIBUTOS ==========
@@ -1033,6 +1034,13 @@ with tab5:
         xl = pd.ExcelFile('Evolucao Arrecadacao.xlsx')
         anos_disponiveis_evolucao = xl.sheet_names
         
+        # Verificar se há abas no arquivo
+        if not anos_disponiveis_evolucao:
+            st.error("❌ O arquivo 'Evolucao Arrecadacao.xlsx' não possui abas.")
+            st.stop()
+        
+        st.success(f"✅ Arquivo carregado com sucesso! Encontradas {len(anos_disponiveis_evolucao)} abas: {', '.join(anos_disponiveis_evolucao)}")
+        
         # Filtros específicos para evolução
         st.markdown("### 🔍 Filtros de Análise")
         col_filtro1, col_filtro2 = st.columns(2)
@@ -1048,9 +1056,30 @@ with tab5:
         with col_filtro2:
             # Carregar um ano para obter os tributos disponíveis
             if anos_evolucao_selecionados:
-                df_temp = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_evolucao_selecionados[0])
-                tributos_evolucao = df_temp['TRIBUTO/MÊS/ANO'].unique().tolist()
-                
+                try:
+                    df_temp = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_evolucao_selecionados[0])
+                    
+                    # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                    coluna_tributo = None
+                    if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
+                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                    elif 'TRIBUTO' in df_temp.columns:
+                        coluna_tributo = 'TRIBUTO'
+                    
+                    if coluna_tributo:
+                        tributos_evolucao = df_temp[coluna_tributo].unique().tolist()
+                        st.success(f"✅ Encontrados {len(tributos_evolucao)} tributos na aba {anos_evolucao_selecionados[0]} (coluna: {coluna_tributo})")
+                    else:
+                        st.error(f"❌ Coluna de tributo não encontrada na aba {anos_evolucao_selecionados[0]}")
+                        st.write("Colunas disponíveis:", list(df_temp.columns))
+                        tributos_evolucao = []
+                except Exception as e:
+                    st.error(f"❌ Erro ao carregar aba {anos_evolucao_selecionados[0]}: {e}")
+                    tributos_evolucao = []
+            else:
+                tributos_evolucao = []
+            
+            if tributos_evolucao:
                 tributos_evolucao_selecionados = st.multiselect(
                     "🏛️ Tributos para análise",
                     options=tributos_evolucao,
@@ -1065,42 +1094,82 @@ with tab5:
         else:
             # Carregar e processar dados
             dados_evolucao = []
+            erros_processamento = []
             
             for ano in anos_evolucao_selecionados:
-                df_ano = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=ano)
-                
-                # Filtrar tributos selecionados
-                if tributos_evolucao_selecionados:
-                    df_ano = df_ano[df_ano['TRIBUTO/MÊS/ANO'].isin(tributos_evolucao_selecionados)]
-                
-                # Processar dados mensais
-                for _, row in df_ano.iterrows():
-                    tributo = row['TRIBUTO/MÊS/ANO']
+                try:
+                    df_ano = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=ano)
                     
-                    # Processar colunas de meses (colunas 1-12)
-                    for i in range(1, 13):
-                        col_mes = df_ano.columns[i]
-                        if pd.notna(row[col_mes]):
-                            # Calcular superávit/déficit usando a fórmula ARRECADADO - ORÇADO
-                            saldo = row['ARRECADADO'] - row['ORÇADO']
-                            superavit = saldo if saldo > 0 else 0
-                            deficit = abs(saldo) if saldo < 0 else 0
-                            
-                            dados_evolucao.append({
-                                'ANO': ano,
-                                'TRIBUTO': tributo,
-                                'MES': i,
-                                'VALOR_MENSAL': row[col_mes],
-                                'ORCADO': row['ORÇADO'],
-                                'ARRECADADO': row['ARRECADADO'],
-                                'META': row['META'],
-                                'SALDO': saldo,
-                                'SUPERAVIT': superavit,
-                                'DEFICIT': deficit
-                            })
+                    # Verificar se a coluna necessária existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                    coluna_tributo = None
+                    if 'TRIBUTO/MÊS/ANO' in df_ano.columns:
+                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                    elif 'TRIBUTO' in df_ano.columns:
+                        coluna_tributo = 'TRIBUTO'
+                    
+                    if not coluna_tributo:
+                        erros_processamento.append(f"Coluna de tributo não encontrada na aba {ano}")
+                        continue
+                    
+                    # Filtrar tributos selecionados
+                    if tributos_evolucao_selecionados:
+                        df_ano = df_ano[df_ano[coluna_tributo].isin(tributos_evolucao_selecionados)]
+                    
+                    # Verificar se há dados após filtro
+                    if df_ano.empty:
+                        erros_processamento.append(f"Nenhum dado encontrado na aba {ano} após aplicar filtros")
+                        continue
+                    
+                    # Processar dados mensais
+                    for _, row in df_ano.iterrows():
+                        tributo = row[coluna_tributo]
+                        
+                        # Verificar se as colunas necessárias existem
+                        colunas_necessarias = ['ORÇADO', 'ARRECADADO', 'META']
+                        if not all(col in df_ano.columns for col in colunas_necessarias):
+                            erros_processamento.append(f"Colunas necessárias não encontradas na aba {ano}")
+                            continue
+                        
+                        # Processar colunas de meses (colunas 1-12)
+                        for i in range(1, 13):
+                            if i < len(df_ano.columns):
+                                col_mes = df_ano.columns[i]
+                                if pd.notna(row[col_mes]) and row[col_mes] != 0:
+                                    try:
+                                        # Calcular superávit/déficit usando a fórmula ARRECADADO - ORÇADO
+                                        saldo = row['ARRECADADO'] - row['ORÇADO']
+                                        superavit = saldo if saldo > 0 else 0
+                                        deficit = abs(saldo) if saldo < 0 else 0
+                                        
+                                        dados_evolucao.append({
+                                            'ANO': ano,
+                                            'TRIBUTO': tributo,
+                                            'MES': i,
+                                            'VALOR_MENSAL': row[col_mes],
+                                            'ORCADO': row['ORÇADO'],
+                                            'ARRECADADO': row['ARRECADADO'],
+                                            'META': row['META'],
+                                            'SALDO': saldo,
+                                            'SUPERAVIT': superavit,
+                                            'DEFICIT': deficit
+                                        })
+                                    except Exception as e:
+                                        erros_processamento.append(f"Erro ao processar linha do tributo {tributo} na aba {ano}: {e}")
+                
+                except Exception as e:
+                    erros_processamento.append(f"Erro ao carregar aba {ano}: {e}")
+            
+            # Mostrar erros se houver
+            if erros_processamento:
+                st.warning("⚠️ Alguns erros foram encontrados durante o processamento:")
+                for erro in erros_processamento[:5]:  # Mostrar apenas os primeiros 5 erros
+                    st.write(f"• {erro}")
+                if len(erros_processamento) > 5:
+                    st.write(f"• ... e mais {len(erros_processamento) - 5} erros")
             
             if dados_evolucao:
                 df_evolucao = pd.DataFrame(dados_evolucao)
+                st.success(f"✅ Processados {len(dados_evolucao)} registros de dados")
                 
                 # Métricas principais
                 st.markdown("### 📊 Métricas Principais")
@@ -1425,11 +1494,494 @@ with tab5:
                 )
             else:
                 st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
+                if erros_processamento:
+                    st.error("❌ Verifique os erros acima para entender por que nenhum dado foi processado.")
     
     except FileNotFoundError:
         st.warning("📁 O arquivo 'Evolucao Arrecadacao.xlsx' não foi encontrado.")
     except Exception as e:
         st.error(f"❌ Erro ao carregar dados de evolução: {e}")
+        st.write("Detalhes do erro:", str(e))
+
+
+
+# ========== ABA 6: ARRECADAÇÃO DÍVIDA ATIVA ==========
+with tab6:
+    st.markdown("## 💳 Arrecadação Dívida Ativa")
+    
+    try:
+        # Carregar dados de dívida ativa
+        xl_divida = pd.ExcelFile('Arrecadacao Divida Ativa.xlsx')
+        anos_disponiveis_divida = xl_divida.sheet_names
+        
+        # Verificar se há abas no arquivo
+        if not anos_disponiveis_divida:
+            st.error("❌ O arquivo 'Arrecadacao Divida Ativa.xlsx' não possui abas.")
+            st.stop()
+        
+        st.success(f"✅ Arquivo carregado com sucesso! Encontradas {len(anos_disponiveis_divida)} abas: {', '.join(anos_disponiveis_divida)}")
+        
+        # Filtros específicos para dívida ativa
+        st.markdown("### 🔍 Filtros de Análise")
+        col_filtro1, col_filtro2 = st.columns(2)
+        
+        with col_filtro1:
+            anos_divida_selecionados = st.multiselect(
+                "📅 Anos para análise",
+                options=anos_disponiveis_divida,
+                default=anos_disponiveis_divida[-2:] if len(anos_disponiveis_divida) >= 2 else anos_disponiveis_divida,
+                help="Selecione os anos que deseja analisar"
+            )
+        
+        with col_filtro2:
+            # Carregar um ano para obter os tributos disponíveis
+            if anos_divida_selecionados:
+                try:
+                    df_temp = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_divida_selecionados[0])
+                    
+                    # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                    coluna_tributo = None
+                    if 'TRIBUTO/MÊS/ANO' in df_temp.columns:
+                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                    elif 'TRIBUTO' in df_temp.columns:
+                        coluna_tributo = 'TRIBUTO'
+                    
+                    if coluna_tributo:
+                        tributos_divida = df_temp[coluna_tributo].unique().tolist()
+                        st.success(f"✅ Encontrados {len(tributos_divida)} tributos na aba {anos_divida_selecionados[0]} (coluna: {coluna_tributo})")
+                    else:
+                        st.error(f"❌ Coluna de tributo não encontrada na aba {anos_divida_selecionados[0]}")
+                        st.write("Colunas disponíveis:", list(df_temp.columns))
+                        tributos_divida = []
+                except Exception as e:
+                    st.error(f"❌ Erro ao carregar aba {anos_divida_selecionados[0]}: {e}")
+                    tributos_divida = []
+            else:
+                tributos_divida = []
+            
+            if tributos_divida:
+                tributos_divida_selecionados = st.multiselect(
+                    "🏛️ Tributos para análise",
+                    options=tributos_divida,
+                    default=tributos_divida,
+                    help="Selecione os tributos que deseja analisar"
+                )
+            else:
+                tributos_divida_selecionados = []
+        
+        if not anos_divida_selecionados:
+            st.warning("⚠️ Selecione pelo menos um ano para análise.")
+        else:
+            # Carregar e processar dados
+            dados_divida = []
+            erros_processamento = []
+            
+            for ano in anos_divida_selecionados:
+                try:
+                    df_ano = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=ano)
+                    
+                    # Verificar se a coluna necessária existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
+                    coluna_tributo = None
+                    if 'TRIBUTO/MÊS/ANO' in df_ano.columns:
+                        coluna_tributo = 'TRIBUTO/MÊS/ANO'
+                    elif 'TRIBUTO' in df_ano.columns:
+                        coluna_tributo = 'TRIBUTO'
+                    
+                    if not coluna_tributo:
+                        erros_processamento.append(f"Coluna de tributo não encontrada na aba {ano}")
+                        continue
+                    
+                    # Filtrar tributos selecionados
+                    if tributos_divida_selecionados:
+                        df_ano = df_ano[df_ano[coluna_tributo].isin(tributos_divida_selecionados)]
+                    
+                    # Verificar se há dados após filtro
+                    if df_ano.empty:
+                        erros_processamento.append(f"Nenhum dado encontrado na aba {ano} após aplicar filtros")
+                        continue
+                    
+                    # Processar dados mensais
+                    for _, row in df_ano.iterrows():
+                        tributo = row[coluna_tributo]
+                        
+                        # Verificar se as colunas necessárias existem
+                        colunas_necessarias = ['ORÇADO', 'ARRECADADO', 'META']
+                        if not all(col in df_ano.columns for col in colunas_necessarias):
+                            erros_processamento.append(f"Colunas necessárias não encontradas na aba {ano}")
+                            continue
+                        
+                        # Processar colunas de meses (colunas 1-12)
+                        for i in range(1, 13):
+                            if i < len(df_ano.columns):
+                                col_mes = df_ano.columns[i]
+                                if pd.notna(row[col_mes]) and row[col_mes] != 0:
+                                    try:
+                                        # Calcular superávit/déficit usando a fórmula ARRECADADO - ORÇADO
+                                        saldo = row['ARRECADADO'] - row['ORÇADO']
+                                        superavit = saldo if saldo > 0 else 0
+                                        deficit = abs(saldo) if saldo < 0 else 0
+                                        
+                                        dados_divida.append({
+                                            'ANO': ano,
+                                            'TRIBUTO': tributo,
+                                            'MES': i,
+                                            'VALOR_MENSAL': row[col_mes],
+                                            'ORCADO': row['ORÇADO'],
+                                            'ARRECADADO': row['ARRECADADO'],
+                                            'META': row['META'],
+                                            'SALDO': saldo,
+                                            'SUPERAVIT': superavit,
+                                            'DEFICIT': deficit
+                                        })
+                                    except Exception as e:
+                                        erros_processamento.append(f"Erro ao processar linha do tributo {tributo} na aba {ano}: {e}")
+                
+                except Exception as e:
+                    erros_processamento.append(f"Erro ao carregar aba {ano}: {e}")
+            
+            # Mostrar erros se houver
+            if erros_processamento:
+                st.warning("⚠️ Alguns erros foram encontrados durante o processamento:")
+                for erro in erros_processamento[:5]:  # Mostrar apenas os primeiros 5 erros
+                    st.write(f"• {erro}")
+                if len(erros_processamento) > 5:
+                    st.write(f"• ... e mais {len(erros_processamento) - 5} erros")
+            
+            if dados_divida:
+                df_divida = pd.DataFrame(dados_divida)
+                st.success(f"✅ Processados {len(dados_divida)} registros de dados")
+                
+                # Métricas principais
+                st.markdown("### 📊 Métricas Principais")
+                
+                # Calcular métricas por ano
+                metricas_por_ano = df_divida.groupby('ANO').agg({
+                    'ARRECADADO': 'sum',
+                    'ORCADO': 'sum',
+                    'VALOR_MENSAL': 'sum'
+                }).reset_index()
+                
+                # Layout de métricas
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    ultimo_ano_divida = metricas_por_ano['ANO'].max()
+                    ultimo_arrecadado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_divida]['ARRECADADO'].iloc[0]
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value">{formatar_moeda_br(ultimo_arrecadado)}</div>
+                        <div class="metric-label">Dívida Ativa {ultimo_ano_divida}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col2:
+                    ultimo_orcado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_divida]['ORCADO'].iloc[0]
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value">{formatar_moeda_br(ultimo_orcado)}</div>
+                        <div class="metric-label">Orçado {ultimo_ano_divida}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col3:
+                    meta_alcancada = (ultimo_arrecadado / ultimo_orcado * 100) if ultimo_orcado > 0 else 0
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value">{meta_alcancada:.1f}%</div>
+                        <div class="metric-label">Meta Atingida</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                with col4:
+                    superavit_deficit = ultimo_arrecadado - ultimo_orcado
+                    status = "SUPERÁVIT" if superavit_deficit > 0 else "DÉFICIT"
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value">{formatar_moeda_br(abs(superavit_deficit))}</div>
+                        <div class="metric-label">{status}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Gráficos de dívida ativa
+                st.markdown("### 📈 Análise Temporal")
+                
+                # Gráfico 1: Evolução mensal por tributo
+                col_divida1, col_divida2 = st.columns(2)
+                
+                with col_divida1:
+                    # Gráfico de linha para evolução mensal
+                    fig_divida_mensal = px.line(
+                        df_divida,
+                        x='MES',
+                        y='VALOR_MENSAL',
+                        color='TRIBUTO',
+                        title='Evolução Mensal Dívida Ativa por Tributo',
+                        template=tema_grafico
+                    )
+                    
+                    fig_divida_mensal.update_layout(
+                        height=400,
+                        title_x=0.5,
+                        yaxis=dict(
+                            tickformat=".2f",
+                            tickprefix="R$ ",
+                            separatethousands=True,
+                        ),
+                        xaxis=dict(
+                            tickmode='linear',
+                            tick0=1,
+                            dtick=1
+                        )
+                    )
+                    
+                    st.plotly_chart(fig_divida_mensal, use_container_width=True)
+                
+                with col_divida2:
+                    # Gráfico de barras para comparação orçado vs arrecadado
+                    df_comparacao_divida = df_divida.groupby(['ANO', 'TRIBUTO']).agg({
+                        'ORCADO': 'first',
+                        'ARRECADADO': 'first'
+                    }).reset_index()
+                    
+                    # Criar gráfico de barras agrupadas
+                    fig_comparacao_divida = go.Figure()
+                    
+                    for tributo in df_comparacao_divida['TRIBUTO'].unique():
+                        df_tributo = df_comparacao_divida[df_comparacao_divida['TRIBUTO'] == tributo]
+                        
+                        # Barras para orçado
+                        fig_comparacao_divida.add_trace(go.Bar(
+                            name=f'{tributo} - Orçado',
+                            x=df_tributo['ANO'],
+                            y=df_tributo['ORCADO'],
+                            marker_color='lightcoral',
+                            opacity=0.7
+                        ))
+                        
+                        # Barras para arrecadado
+                        fig_comparacao_divida.add_trace(go.Bar(
+                            name=f'{tributo} - Arrecadado',
+                            x=df_tributo['ANO'],
+                            y=df_tributo['ARRECADADO'],
+                            marker_color='darkred',
+                            opacity=0.9
+                        ))
+                    
+                    fig_comparacao_divida.update_layout(
+                        title='Orçado vs Arrecadado Dívida Ativa por Tributo e Ano',
+                        barmode='group',
+                        height=400,
+                        template=tema_grafico,
+                        title_x=0.5,
+                        yaxis=dict(
+                            tickformat=".2f",
+                            tickprefix="R$ ",
+                            separatethousands=True,
+                        )
+                    )
+                    
+                    st.plotly_chart(fig_comparacao_divida, use_container_width=True)
+                
+                # Gráfico 2: Análise de metas
+                st.markdown("### 🎯 Análise de Metas")
+                
+                # Calcular percentual de meta por tributo e ano
+                df_metas_divida = df_divida.groupby(['ANO', 'TRIBUTO']).agg({
+                    'META': 'first'
+                }).reset_index()
+                
+                fig_metas_divida = px.bar(
+                    df_metas_divida,
+                    x='ANO',
+                    y='META',
+                    color='TRIBUTO',
+                    title='Percentual de Meta Atingida Dívida Ativa por Tributo',
+                    template=tema_grafico
+                )
+                
+                fig_metas_divida.update_layout(
+                    height=400,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".1f",
+                        ticksuffix="%",
+                        title="Meta (%)"
+                    )
+                )
+                
+                st.plotly_chart(fig_metas_divida, use_container_width=True)
+                
+                # Gráfico 3: Análise de superávit/déficit
+                st.markdown("### 💰 Análise de Superávit/Déficit")
+                
+                # Calcular superávit/déficit por tributo e ano usando a fórmula ARRECADADO - ORÇADO
+                df_superavit_divida = df_divida.groupby(['ANO', 'TRIBUTO']).agg({
+                    'ARRECADADO': 'first',
+                    'ORCADO': 'first',
+                    'SALDO': 'first'
+                }).reset_index()
+                
+                # Calcular status baseado no saldo
+                df_superavit_divida['STATUS'] = df_superavit_divida['SALDO'].apply(lambda x: 'SUPERÁVIT' if x > 0 else 'DÉFICIT')
+                
+                # Criar gráfico com cores diferentes para superávit e déficit
+                fig_superavit_divida = go.Figure()
+                
+                for tributo in df_superavit_divida['TRIBUTO'].unique():
+                    df_tributo = df_superavit_divida[df_superavit_divida['TRIBUTO'] == tributo]
+                    
+                    # Separar superávit e déficit
+                    superavit_data = df_tributo[df_tributo['SALDO'] > 0]
+                    deficit_data = df_tributo[df_tributo['SALDO'] < 0]
+                    
+                    # Adicionar barras de superávit (verde)
+                    if not superavit_data.empty:
+                        fig_superavit_divida.add_trace(go.Bar(
+                            name=f'{tributo} - Superávit',
+                            x=superavit_data['ANO'],
+                            y=superavit_data['SALDO'],
+                            marker_color='green',
+                            opacity=0.8,
+                            showlegend=True
+                        ))
+                    
+                    # Adicionar barras de déficit (vermelho)
+                    if not deficit_data.empty:
+                        fig_superavit_divida.add_trace(go.Bar(
+                            name=f'{tributo} - Déficit',
+                            x=deficit_data['ANO'],
+                            y=deficit_data['SALDO'],
+                            marker_color='red',
+                            opacity=0.8,
+                            showlegend=True
+                        ))
+                
+                fig_superavit_divida.update_layout(
+                    title='Superávit/Déficit Dívida Ativa por Tributo e Ano (ARRECADADO - ORÇADO)',
+                    height=400,
+                    template=tema_grafico,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".2f",
+                        tickprefix="R$ ",
+                        separatethousands=True,
+                        title="Saldo (R$)"
+                    ),
+                    barmode='group'
+                )
+                
+                # Adicionar linha de referência em zero
+                fig_superavit_divida.add_hline(y=0, line_dash="dash", line_color="black", line_width=2)
+                
+                st.plotly_chart(fig_superavit_divida, use_container_width=True)
+                
+                # Análise detalhada de superávit/déficit
+                st.markdown("### 📊 Análise Detalhada de Superávit/Déficit")
+                
+                # Criar métricas por status
+                col_analise1, col_analise2, col_analise3 = st.columns(3)
+                
+                with col_analise1:
+                    total_superavit_divida = df_superavit_divida[df_superavit_divida['SALDO'] > 0]['SALDO'].sum()
+                    st.metric(
+                        label="💰 Total Superávit Dívida Ativa",
+                        value=formatar_moeda_br(total_superavit_divida),
+                        delta=f"{len(df_superavit_divida[df_superavit_divida['SALDO'] > 0])} registros"
+                    )
+                
+                with col_analise2:
+                    total_deficit_divida = abs(df_superavit_divida[df_superavit_divida['SALDO'] < 0]['SALDO'].sum())
+                    st.metric(
+                        label="📉 Total Déficit Dívida Ativa",
+                        value=formatar_moeda_br(total_deficit_divida),
+                        delta=f"{len(df_superavit_divida[df_superavit_divida['SALDO'] < 0])} registros"
+                    )
+                
+                with col_analise3:
+                    saldo_geral_divida = df_superavit_divida['SALDO'].sum()
+                    st.metric(
+                        label="⚖️ Saldo Geral Dívida Ativa",
+                        value=formatar_moeda_br(saldo_geral_divida),
+                        delta="Superávit" if saldo_geral_divida > 0 else "Déficit"
+                    )
+                
+                # Tabela de dados consolidados
+                st.markdown("### 📋 Dados Consolidados")
+                
+                # Criar tabela consolidada usando a fórmula ARRECADADO - ORÇADO
+                df_consolidado_divida = df_divida.groupby(['ANO', 'TRIBUTO']).agg({
+                    'ORCADO': 'first',
+                    'ARRECADADO': 'first',
+                    'META': 'first',
+                    'SALDO': 'first'
+                }).reset_index()
+                
+                # Calcular status baseado no saldo
+                df_consolidado_divida['STATUS'] = df_consolidado_divida['SALDO'].apply(lambda x: 'SUPERÁVIT' if x > 0 else 'DÉFICIT')
+                
+                # Adicionar coluna de percentual de realização
+                df_consolidado_divida['PERCENTUAL_REALIZACAO'] = (df_consolidado_divida['ARRECADADO'] / df_consolidado_divida['ORCADO'] * 100).round(1)
+                
+                # Formatar dados para exibição
+                df_consolidado_divida_formatado = df_consolidado_divida.copy()
+                df_consolidado_divida_formatado['ORCADO'] = df_consolidado_divida_formatado['ORCADO'].apply(formatar_moeda_br)
+                df_consolidado_divida_formatado['ARRECADADO'] = df_consolidado_divida_formatado['ARRECADADO'].apply(formatar_moeda_br)
+                df_consolidado_divida_formatado['META'] = df_consolidado_divida_formatado['META'].apply(lambda x: f"{x:.1f}%")
+                df_consolidado_divida_formatado['SALDO'] = df_consolidado_divida_formatado['SALDO'].apply(formatar_moeda_br)
+                df_consolidado_divida_formatado['PERCENTUAL_REALIZACAO'] = df_consolidado_divida_formatado['PERCENTUAL_REALIZACAO'].apply(lambda x: f"{x:.1f}%")
+                
+                # Selecionar colunas para exibição
+                colunas_exibicao = ['ANO', 'TRIBUTO', 'ORCADO', 'ARRECADADO', 'PERCENTUAL_REALIZACAO', 'META', 'SALDO', 'STATUS']
+                df_exibicao_divida = df_consolidado_divida_formatado[colunas_exibicao]
+                
+                # Explicação das colunas da tabela
+                st.markdown("""
+                **📋 Legenda da Tabela:**
+                - **ANO:** Ano de referência
+                - **TRIBUTO:** Tipo de tributo
+                - **ORÇADO:** Valor orçado para o ano
+                - **ARRECADADO:** Valor efetivamente arrecadado
+                - **% REALIZAÇÃO:** Percentual de realização (ARRECADADO/ORÇADO × 100)
+                - **META:** Meta estabelecida (%)
+                - **SALDO:** Saldo calculado (ARRECADADO - ORÇADO)
+                - **STATUS:** Superávit (saldo > 0) ou Déficit (saldo < 0)
+                """)
+                
+                st.dataframe(
+                    df_exibicao_divida,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Download dos dados
+                st.markdown("### 💾 Download dos Dados")
+                
+                # Preparar dados para download
+                df_download_divida = df_consolidado_divida.copy()
+                df_download_divida['ORCADO'] = df_download_divida['ORCADO'].apply(lambda x: f"R$ {x:,.2f}")
+                df_download_divida['ARRECADADO'] = df_download_divida['ARRECADADO'].apply(lambda x: f"R$ {x:,.2f}")
+                df_download_divida['META'] = df_download_divida['META'].apply(lambda x: f"{x:.1f}%")
+                df_download_divida['SALDO'] = df_download_divida['SALDO'].apply(lambda x: f"R$ {x:,.2f}")
+                df_download_divida['PERCENTUAL_REALIZACAO'] = df_download_divida['PERCENTUAL_REALIZACAO'].apply(lambda x: f"{x:.1f}%")
+                
+                # Criar arquivo CSV para download
+                csv_divida = df_download_divida.to_csv(index=False, encoding='utf-8-sig')
+                st.download_button(
+                    label="📥 Download CSV Dívida Ativa",
+                    data=csv_divida,
+                    file_name=f"divida_ativa_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("⚠️ Nenhum dado encontrado com os filtros aplicados.")
+                if erros_processamento:
+                    st.error("❌ Verifique os erros acima para entender por que nenhum dado foi processado.")
+    
+    except FileNotFoundError:
+        st.warning("📁 O arquivo 'Arrecadacao Divida Ativa.xlsx' não foi encontrado.")
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar dados de dívida ativa: {e}")
+        st.write("Detalhes do erro:", str(e))
 
 # ========== FOOTER ==========
 st.markdown("---")
