@@ -79,7 +79,8 @@ def carregar_dados(arquivo):
     try:
         df = pd.read_excel(arquivo, header=2)
         df = df.loc[:, ~df.columns.str.contains("^Unnamed")]
-        df.columns = df.columns.str.strip().str.upper()
+        # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+        df.columns = df.columns.astype(str).str.strip().str.upper()
         df["ANO"] = df["ANO"].astype(str)
         return df
     except Exception as e:
@@ -104,7 +105,8 @@ with st.sidebar:
         try:
             df_temp = pd.read_excel(arquivo, header=2)
             df_temp = df_temp.loc[:, ~df_temp.columns.str.contains("^Unnamed")]
-            df_temp.columns = df_temp.columns.str.strip().str.upper()
+            # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+            df_temp.columns = df_temp.columns.astype(str).str.strip().str.upper()
             if "ANO" in df_temp.columns:
                 anos_disponiveis.update(df_temp["ANO"].astype(str).tolist())
                 # Para tributos, apenas do arquivo principal
@@ -930,6 +932,8 @@ with tab3:
         if anos_disponiveis_evolucao:
             try:
                 df_previa = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_disponiveis_evolucao[0])
+                # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                df_previa.columns = df_previa.columns.astype(str)
                 with st.expander(f"📋 Ver primeiras linhas da aba '{anos_disponiveis_evolucao[0]}'", expanded=False):
                     st.dataframe(df_previa.head(10), use_container_width=True)
             except Exception as e:
@@ -948,6 +952,8 @@ with tab3:
         if anos_evolucao_selecionados:
             try:
                 df_temp = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=anos_evolucao_selecionados[0])
+                # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                df_temp.columns = df_temp.columns.astype(str)
                 
                 # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
                 coluna_tributo = None
@@ -978,6 +984,8 @@ with tab3:
             for ano in anos_evolucao_selecionados:
                 try:
                     df_ano = pd.read_excel('Evolucao Arrecadacao.xlsx', sheet_name=ano)
+                    # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                    df_ano.columns = df_ano.columns.astype(str)
                     
                     # Verificar se a coluna necessária existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
                     coluna_tributo = None
@@ -1053,37 +1061,41 @@ with tab3:
                 # Métricas principais
                 st.markdown("### 📊 Métricas Principais")
                 
-                # Calcular métricas por ano
-                metricas_por_ano = df_evolucao.groupby('ANO').agg({
-                    'ARRECADADO': 'sum',
-                    'ORCADO': 'sum',
-                    'VALOR_MENSAL': 'sum'
+                # Calcular métricas para todos os anos selecionados (não apenas o último)
+                # Somatória total dos valores mensais para todos os anos selecionados
+                total_valor_mensal = df_evolucao['VALOR_MENSAL'].sum()
+                
+                # Calcular orçado e arrecadado totais para todos os anos selecionados
+                df_orcado_arrecadado = df_evolucao.groupby(['ANO', 'TRIBUTO']).agg({
+                    'ORCADO': 'first',      # Pegar apenas uma vez por tributo/ano
+                    'ARRECADADO': 'first'   # Pegar apenas uma vez por tributo/ano
                 }).reset_index()
+                
+                # Somar orçado e arrecadado para todos os anos selecionados
+                total_orcado = df_orcado_arrecadado['ORCADO'].sum()
+                total_arrecadado = df_orcado_arrecadado['ARRECADADO'].sum()
                 
                 # Layout de métricas
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    ultimo_ano_evol = metricas_por_ano['ANO'].max()
-                    ultimo_arrecadado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_evol]['ARRECADADO'].iloc[0]
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_arrecadado)}</div>
-                        <div class="metric-label">Arrecadado {ultimo_ano_evol}</div>
+                        <div class="metric-value">{formatar_moeda_br(total_arrecadado)}</div>
+                        <div class="metric-label">Arrecadado</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col2:
-                    ultimo_orcado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_evol]['ORCADO'].iloc[0]
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_orcado)}</div>
-                        <div class="metric-label">Orçado {ultimo_ano_evol}</div>
+                        <div class="metric-value">{formatar_moeda_br(total_orcado)}</div>
+                        <div class="metric-label">Orçado</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col3:
-                    meta_alcancada = (ultimo_arrecadado / ultimo_orcado * 100) if ultimo_orcado > 0 else 0
+                    meta_alcancada = (total_arrecadado / total_orcado * 100) if total_orcado > 0 else 0
                     st.markdown(f"""
                     <div class="metric-card">
                         <div class="metric-value">{meta_alcancada:.1f}%</div>
@@ -1092,7 +1104,7 @@ with tab3:
                     """, unsafe_allow_html=True)
                 
                 with col4:
-                    superavit_deficit = ultimo_arrecadado - ultimo_orcado
+                    superavit_deficit = total_arrecadado - total_orcado
                     status = "SUPERÁVIT" if superavit_deficit > 0 else "DÉFICIT"
                     st.markdown(f"""
                     <div class="metric-card">
@@ -1443,6 +1455,14 @@ with tab4:
     
     st.markdown("---")
     
+    # Informação sobre o cálculo de superávit/déficit
+    st.info("""
+    💡 **Cálculo de Superávit/Déficit:** 
+    - **Superávit:** Quando ARRECADADO > ORÇADO (valor positivo)
+    - **Déficit:** Quando ARRECADADO < ORÇADO (valor negativo)
+    - **Fórmula:** SALDO = ARRECADADO - ORÇADO
+    """)
+    
     # Mostrar filtros globais aplicados
     if anos_selecionados or tributos_selecionados:
         st.markdown("### 🔍 Filtros Globais Aplicados")
@@ -1481,6 +1501,8 @@ with tab4:
         if anos_disponiveis_divida:
             try:
                 df_previa = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_disponiveis_divida[0])
+                # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                df_previa.columns = df_previa.columns.astype(str)
                 with st.expander(f"📋 Ver primeiras linhas da aba '{anos_disponiveis_divida[0]}'", expanded=False):
                     st.dataframe(df_previa.head(10), use_container_width=True)
             except Exception as e:
@@ -1499,6 +1521,8 @@ with tab4:
         if anos_divida_selecionados:
             try:
                 df_temp = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=anos_divida_selecionados[0])
+                # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                df_temp.columns = df_temp.columns.astype(str)
                 
                 # Verificar se a coluna existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
                 coluna_tributo = None
@@ -1529,6 +1553,8 @@ with tab4:
             for ano in anos_divida_selecionados:
                 try:
                     df_ano = pd.read_excel('Arrecadacao Divida Ativa.xlsx', sheet_name=ano)
+                    # Converter todos os nomes de colunas para string para evitar warning de tipos mistos
+                    df_ano.columns = df_ano.columns.astype(str)
                     
                     # Verificar se a coluna necessária existe (pode ser 'TRIBUTO/MÊS/ANO' ou 'TRIBUTO')
                     coluna_tributo = None
@@ -1604,37 +1630,41 @@ with tab4:
                 # Métricas principais
                 st.markdown("### 📊 Métricas Principais")
                 
-                # Calcular métricas por ano
-                metricas_por_ano = df_divida.groupby('ANO').agg({
-                    'ARRECADADO': 'sum',
-                    'ORCADO': 'sum',
-                    'VALOR_MENSAL': 'sum'
+                # Calcular métricas para todos os anos selecionados (não apenas o último)
+                # Somatória total dos valores mensais para todos os anos selecionados
+                total_valor_mensal_divida = df_divida['VALOR_MENSAL'].sum()
+                
+                # Calcular orçado e arrecadado totais para todos os anos selecionados
+                df_orcado_arrecadado = df_divida.groupby(['ANO', 'TRIBUTO']).agg({
+                    'ORCADO': 'first',      # Pegar apenas uma vez por tributo/ano
+                    'ARRECADADO': 'first'   # Pegar apenas uma vez por tributo/ano
                 }).reset_index()
+                
+                # Somar orçado e arrecadado para todos os anos selecionados
+                total_orcado_divida = df_orcado_arrecadado['ORCADO'].sum()
+                total_arrecadado_divida = df_orcado_arrecadado['ARRECADADO'].sum()
                 
                 # Layout de métricas
                 col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
-                    ultimo_ano_divida = metricas_por_ano['ANO'].max()
-                    ultimo_arrecadado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_divida]['ARRECADADO'].iloc[0]
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_arrecadado)}</div>
-                        <div class="metric-label">Dívida Ativa {ultimo_ano_divida}</div>
+                        <div class="metric-value">{formatar_moeda_br(total_arrecadado_divida)}</div>
+                        <div class="metric-label">Dívida Ativa</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col2:
-                    ultimo_orcado = metricas_por_ano[metricas_por_ano['ANO'] == ultimo_ano_divida]['ORCADO'].iloc[0]
                     st.markdown(f"""
                     <div class="metric-card">
-                        <div class="metric-value">{formatar_moeda_br(ultimo_orcado)}</div>
-                        <div class="metric-label">Orçado {ultimo_ano_divida}</div>
+                        <div class="metric-value">{formatar_moeda_br(total_orcado_divida)}</div>
+                        <div class="metric-label">Orçado</div>
                     </div>
                     """, unsafe_allow_html=True)
                 
                 with col3:
-                    meta_alcancada = (ultimo_arrecadado / ultimo_orcado * 100) if ultimo_orcado > 0 else 0
+                    meta_alcancada = (total_arrecadado_divida / total_orcado_divida * 100) if total_orcado_divida > 0 else 0
                     st.markdown(f"""
                     <div class="metric-card">
                         <div class="metric-value">{meta_alcancada:.1f}%</div>
@@ -1643,7 +1673,7 @@ with tab4:
                     """, unsafe_allow_html=True)
                 
                 with col4:
-                    superavit_deficit = ultimo_arrecadado - ultimo_orcado
+                    superavit_deficit = total_arrecadado_divida - total_orcado_divida
                     status = "SUPERÁVIT" if superavit_deficit > 0 else "DÉFICIT"
                     st.markdown(f"""
                     <div class="metric-card">
