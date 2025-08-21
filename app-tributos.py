@@ -138,6 +138,20 @@ with st.sidebar:
     else:
         tributos_selecionados = []
     
+    # Filtro de meses (para abas de Evolução e Dívida Ativa)
+    st.markdown("### 📅 Filtros de Meses")
+    meses_disponiveis = [
+        "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+        "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ]
+    
+    meses_selecionados = st.multiselect(
+        "📅 Meses para análise",
+        options=meses_disponiveis,
+        default=meses_disponiveis,
+        help="Selecione os meses que deseja analisar nas abas de Evolução e Dívida Ativa"
+    )
+    
     # Botão para limpar filtros
     if st.button("🔄 Limpar Todos os Filtros", help="Restaura todos os filtros para os valores padrão"):
         st.rerun()
@@ -147,9 +161,10 @@ with st.sidebar:
     st.markdown("""
     - **📅 Anos:** Aplicado em todas as abas automaticamente
     - **🏛️ Tributos:** Aplicado em todas as abas que possuem dados de tributos
+    - **📅 Meses:** Aplicado nas abas de Evolução e Dívida Ativa para filtrar dados mensais
     - Os filtros são aplicados automaticamente em todas as visualizações
     - Use o botão "Limpar Todos os Filtros" para restaurar os valores padrão
-    - Se um ano/tributo não existir em uma aba específica, será ignorado
+    - Se um ano/tributo/mês não existir em uma aba específica, será ignorado
     """)
     
     st.markdown("---")
@@ -895,9 +910,9 @@ with tab3:
     """)
     
     # Mostrar filtros globais aplicados
-    if anos_selecionados or tributos_selecionados:
+    if anos_selecionados or tributos_selecionados or meses_selecionados:
         st.markdown("### 🔍 Filtros Globais Aplicados")
-        col_filtro1, col_filtro2 = st.columns(2)
+        col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
         
         with col_filtro1:
             if anos_selecionados:
@@ -906,6 +921,10 @@ with tab3:
         with col_filtro2:
             if tributos_selecionados:
                 st.info(f"🏛️ **Tributos selecionados:** {', '.join(tributos_selecionados)}")
+        
+        with col_filtro3:
+            if meses_selecionados:
+                st.info(f"📅 **Meses selecionados:** {', '.join(meses_selecionados)}")
     
     try:
         # Carregar dados de evolução
@@ -974,6 +993,15 @@ with tab3:
         # Usar filtros globais de tributos se disponíveis, senão usar todos os tributos
         tributos_evolucao_selecionados = tributos_selecionados if tributos_selecionados else tributos_evolucao
         
+        # Mapear meses selecionados para números
+        meses_para_numero = {
+            "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+            "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+        }
+        
+        # Usar filtros globais de meses se disponíveis, senão usar todos os meses
+        meses_evolucao_selecionados = [meses_para_numero[mes] for mes in meses_selecionados] if meses_selecionados else list(range(1, 13))
+        
         if not anos_evolucao_selecionados:
             st.warning("⚠️ Nenhum ano selecionado para análise.")
         else:
@@ -1017,8 +1045,8 @@ with tab3:
                             erros_processamento.append(f"Colunas necessárias não encontradas na aba {ano}")
                             continue
                         
-                        # Processar colunas de meses (colunas 1-12)
-                        for i in range(1, 13):
+                        # Processar colunas de meses (colunas 1-12) - apenas meses selecionados
+                        for i in meses_evolucao_selecionados:
                             if i < len(df_ano.columns):
                                 col_mes = df_ano.columns[i]
                                 if pd.notna(row[col_mes]) and row[col_mes] != 0:
@@ -1032,6 +1060,7 @@ with tab3:
                                             'ANO': ano,
                                             'TRIBUTO': tributo,
                                             'MES': i,
+                                            'NOME_MES': list(meses_para_numero.keys())[list(meses_para_numero.values()).index(i)],
                                             'VALOR_MENSAL': row[col_mes],
                                             'ORCADO': row['ORÇADO'],
                                             'ARRECADADO': row['ARRECADADO'],
@@ -1121,9 +1150,24 @@ with tab3:
                 
                 with col_evol1:
                     # Gráfico de linha para evolução mensal
+                    # Preparar dados com ordenação correta dos meses
+                    df_evol_mensal = df_evolucao.copy()
+                    
+                    # Criar mapeamento de meses para ordenação
+                    ordem_meses = {
+                        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+                        "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+                    }
+                    
+                    # Adicionar coluna de ordenação
+                    df_evol_mensal['ORDEM_MES'] = df_evol_mensal['NOME_MES'].map(ordem_meses)
+                    
+                    # Ordenar por tributo, ano e ordem do mês
+                    df_evol_mensal = df_evol_mensal.sort_values(['TRIBUTO', 'ANO', 'ORDEM_MES'])
+                    
                     fig_evol_mensal = px.line(
-                        df_evolucao,
-                        x='MES',
+                        df_evol_mensal,
+                        x='NOME_MES',
                         y='VALOR_MENSAL',
                         color='TRIBUTO',
                         title='Evolução Mensal por Tributo',
@@ -1137,11 +1181,6 @@ with tab3:
                             tickformat=".2f",
                             tickprefix="R$ ",
                             separatethousands=True,
-                        ),
-                        xaxis=dict(
-                            tickmode='linear',
-                            tick0=1,
-                            dtick=1
                         )
                     )
                     
@@ -1192,6 +1231,73 @@ with tab3:
                     )
                     
                     st.plotly_chart(fig_comparacao, use_container_width=True)
+                
+                # Gráfico comparativo entre anos
+                st.markdown("### 🔍 Comparativo Entre Anos")
+                
+                # Criar gráfico comparativo por mês entre anos
+                # Preparar dados com ordenação correta dos meses
+                df_comparativo = df_evolucao.groupby(['ANO', 'NOME_MES'])['VALOR_MENSAL'].sum().reset_index()
+                
+                # Criar mapeamento de meses para ordenação
+                ordem_meses = {
+                    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+                    "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+                }
+                
+                # Adicionar coluna de ordenação
+                df_comparativo['ORDEM_MES'] = df_comparativo['NOME_MES'].map(ordem_meses)
+                
+                # Ordenar por ano e ordem do mês
+                df_comparativo = df_comparativo.sort_values(['ANO', 'ORDEM_MES'])
+                
+                fig_comparativo_anos = px.line(
+                    df_comparativo,
+                    x='NOME_MES',
+                    y='VALOR_MENSAL',
+                    color='ANO',
+                    title='Comparativo de Arrecadação Mensal Entre Anos',
+                    template=tema_grafico
+                )
+                
+                fig_comparativo_anos.update_layout(
+                    height=500,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".2f",
+                        tickprefix="R$ ",
+                        separatethousands=True,
+                    ),
+                    xaxis_title="Mês",
+                    yaxis_title="Valor Total (R$)"
+                )
+                
+                st.plotly_chart(fig_comparativo_anos, use_container_width=True)
+                
+                # Gráfico de barras comparativo por tributo entre anos
+                fig_comparativo_tributos = px.bar(
+                    df_evolucao.groupby(['ANO', 'TRIBUTO'])['VALOR_MENSAL'].sum().reset_index(),
+                    x='TRIBUTO',
+                    y='VALOR_MENSAL',
+                    color='ANO',
+                    title='Comparativo de Arrecadação por Tributo Entre Anos',
+                    template=tema_grafico,
+                    barmode='group'
+                )
+                
+                fig_comparativo_tributos.update_layout(
+                    height=500,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".2f",
+                        tickprefix="R$ ",
+                        separatethousands=True,
+                    ),
+                    xaxis_title="Tributo",
+                    yaxis_title="Valor Total (R$)"
+                )
+                
+                st.plotly_chart(fig_comparativo_tributos, use_container_width=True)
                 
                 # Gráfico 2: Análise de metas
                 st.markdown("### 🎯 Análise de Metas")
@@ -1464,9 +1570,9 @@ with tab4:
     """)
     
     # Mostrar filtros globais aplicados
-    if anos_selecionados or tributos_selecionados:
+    if anos_selecionados or tributos_selecionados or meses_selecionados:
         st.markdown("### 🔍 Filtros Globais Aplicados")
-        col_filtro1, col_filtro2 = st.columns(2)
+        col_filtro1, col_filtro2, col_filtro3 = st.columns(3)
         
         with col_filtro1:
             if anos_selecionados:
@@ -1475,6 +1581,10 @@ with tab4:
         with col_filtro2:
             if tributos_selecionados:
                 st.info(f"🏛️ **Tributos selecionados:** {', '.join(tributos_selecionados)}")
+        
+        with col_filtro3:
+            if meses_selecionados:
+                st.info(f"📅 **Meses selecionados:** {', '.join(meses_selecionados)}")
     
     try:
         # Carregar dados de dívida ativa
@@ -1543,6 +1653,15 @@ with tab4:
         # Usar filtros globais de tributos se disponíveis, senão usar todos os tributos
         tributos_divida_selecionados = tributos_selecionados if tributos_selecionados else tributos_divida
         
+        # Mapear meses selecionados para números
+        meses_para_numero = {
+            "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+            "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+        }
+        
+        # Usar filtros globais de meses se disponíveis, senão usar todos os meses
+        meses_divida_selecionados = [meses_para_numero[mes] for mes in meses_selecionados] if meses_selecionados else list(range(1, 13))
+        
         if not anos_divida_selecionados:
             st.warning("⚠️ Nenhum ano selecionado para análise.")
         else:
@@ -1586,8 +1705,8 @@ with tab4:
                             erros_processamento.append(f"Colunas necessárias não encontradas na aba {ano}")
                             continue
                         
-                        # Processar colunas de meses (colunas 1-12)
-                        for i in range(1, 13):
+                        # Processar colunas de meses (colunas 1-12) - apenas meses selecionados
+                        for i in meses_divida_selecionados:
                             if i < len(df_ano.columns):
                                 col_mes = df_ano.columns[i]
                                 if pd.notna(row[col_mes]) and row[col_mes] != 0:
@@ -1601,6 +1720,7 @@ with tab4:
                                             'ANO': ano,
                                             'TRIBUTO': tributo,
                                             'MES': i,
+                                            'NOME_MES': list(meses_para_numero.keys())[list(meses_para_numero.values()).index(i)],
                                             'VALOR_MENSAL': row[col_mes],
                                             'ORCADO': row['ORÇADO'],
                                             'ARRECADADO': row['ARRECADADO'],
@@ -1690,9 +1810,24 @@ with tab4:
                 
                 with col_divida1:
                     # Gráfico de linha para evolução mensal
+                    # Preparar dados com ordenação correta dos meses
+                    df_divida_mensal = df_divida.copy()
+                    
+                    # Criar mapeamento de meses para ordenação
+                    ordem_meses = {
+                        "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+                        "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+                    }
+                    
+                    # Adicionar coluna de ordenação
+                    df_divida_mensal['ORDEM_MES'] = df_divida_mensal['NOME_MES'].map(ordem_meses)
+                    
+                    # Ordenar por tributo, ano e ordem do mês
+                    df_divida_mensal = df_divida_mensal.sort_values(['TRIBUTO', 'ANO', 'ORDEM_MES'])
+                    
                     fig_divida_mensal = px.line(
-                        df_divida,
-                        x='MES',
+                        df_divida_mensal,
+                        x='NOME_MES',
                         y='VALOR_MENSAL',
                         color='TRIBUTO',
                         title='Evolução Mensal Dívida Ativa por Tributo',
@@ -1706,11 +1841,6 @@ with tab4:
                             tickformat=".2f",
                             tickprefix="R$ ",
                             separatethousands=True,
-                        ),
-                        xaxis=dict(
-                            tickmode='linear',
-                            tick0=1,
-                            dtick=1
                         )
                     )
                     
@@ -1761,6 +1891,73 @@ with tab4:
                     )
                     
                     st.plotly_chart(fig_comparacao_divida, use_container_width=True)
+                
+                # Gráfico comparativo entre anos
+                st.markdown("### 🔍 Comparativo Entre Anos")
+                
+                # Criar gráfico comparativo por mês entre anos
+                # Preparar dados com ordenação correta dos meses
+                df_comparativo_divida = df_divida.groupby(['ANO', 'NOME_MES'])['VALOR_MENSAL'].sum().reset_index()
+                
+                # Criar mapeamento de meses para ordenação
+                ordem_meses = {
+                    "Janeiro": 1, "Fevereiro": 2, "Março": 3, "Abril": 4, "Maio": 5, "Junho": 6,
+                    "Julho": 7, "Agosto": 8, "Setembro": 9, "Outubro": 10, "Novembro": 11, "Dezembro": 12
+                }
+                
+                # Adicionar coluna de ordenação
+                df_comparativo_divida['ORDEM_MES'] = df_comparativo_divida['NOME_MES'].map(ordem_meses)
+                
+                # Ordenar por ano e ordem do mês
+                df_comparativo_divida = df_comparativo_divida.sort_values(['ANO', 'ORDEM_MES'])
+                
+                fig_comparativo_anos_divida = px.line(
+                    df_comparativo_divida,
+                    x='NOME_MES',
+                    y='VALOR_MENSAL',
+                    color='ANO',
+                    title='Comparativo de Dívida Ativa Mensal Entre Anos',
+                    template=tema_grafico
+                )
+                
+                fig_comparativo_anos_divida.update_layout(
+                    height=500,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".2f",
+                        tickprefix="R$ ",
+                        separatethousands=True,
+                    ),
+                    xaxis_title="Mês",
+                    yaxis_title="Valor Total (R$)"
+                )
+                
+                st.plotly_chart(fig_comparativo_anos_divida, use_container_width=True)
+                
+                # Gráfico de barras comparativo por tributo entre anos
+                fig_comparativo_tributos_divida = px.bar(
+                    df_divida.groupby(['ANO', 'TRIBUTO'])['VALOR_MENSAL'].sum().reset_index(),
+                    x='TRIBUTO',
+                    y='VALOR_MENSAL',
+                    color='ANO',
+                    title='Comparativo de Dívida Ativa por Tributo Entre Anos',
+                    template=tema_grafico,
+                    barmode='group'
+                )
+                
+                fig_comparativo_tributos_divida.update_layout(
+                    height=500,
+                    title_x=0.5,
+                    yaxis=dict(
+                        tickformat=".2f",
+                        tickprefix="R$ ",
+                        separatethousands=True,
+                    ),
+                    xaxis_title="Tributo",
+                    yaxis_title="Valor Total (R$)"
+                )
+                
+                st.plotly_chart(fig_comparativo_tributos_divida, use_container_width=True)
                 
                 # Gráfico 2: Análise de metas
                 st.markdown("### 🎯 Análise de Metas")
